@@ -392,6 +392,32 @@ window.STORE_CONFIG = [
     colQty: "E",
     progressRange: "K:Z",
     startRow: 6
+  },
+  {
+    id: "SS",
+    name: "SS",
+    url: "https://docs.google.com/spreadsheets/d/1b_8SxLQK7psTWZB0C1NBYtxXNqP1bj8REUPOeCcP9bU/",
+    sheet: "SS",
+    colJob: "A",
+    colOrder: "F",
+    colCustomer: "B",
+    colProduct: "C",
+    colQty: "E",
+    progressRange: "K:Z",
+    startRow: 6
+  },
+  {
+    id: "SV",
+    name: "SV",
+    url: "https://docs.google.com/spreadsheets/d/1b_8SxLQK7psTWZB0C1NBYtxXNqP1bj8REUPOeCcP9bU/",
+    sheet: "SV",
+    colJob: "A",
+    colOrder: "F",
+    colCustomer: "B",
+    colProduct: "C",
+    colQty: "E",
+    progressRange: "K:Z",
+    startRow: 6
   }
 
 ];
