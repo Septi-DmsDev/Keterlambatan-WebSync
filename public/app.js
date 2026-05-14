@@ -1,5 +1,11 @@
 const DATE_COL = "Pesanan Harus Dikirimkan Sebelum (Menghindari keterlambatan)";
 const EXCEL_ORDER_COL = "No. Pesanan";
+const ACCESS_PIN = "140526";
+const ACCESS_SESSION_KEY = "urgenator_pin_ok";
+const READY_STOCK_SHEET_ID = "1BkMkaIiH-oQxMiLR-mtzQkN504bY84eKwbgQDJ6RmLE";
+const READY_STOCK_TABS = ["PP TEKNOS", "PP DREAM/MAHAR", "PP RICH", "PP VARIATIF", "PP ASHA", "PP MALL", "PP CLASSY"];
+const READY_STOCK_ORDER_COLS = ["C", "H", "M", "R", "W", "AB"];
+const IMPORT_PRODUCT_COL = "O";
 const STAGES = [
   "ACC PERTAMA",
   "DESAIN FIX",
@@ -17,6 +23,7 @@ let rowsAll = [];
 let rowsFiltered = [];
 let matchedRows = [];
 let matchedRowsAll = [];
+let excelSheetRef = null;
 let orderChart;
 let activeChartDate = "";
 
@@ -30,6 +37,7 @@ const dateTo = document.getElementById("dateTo");
 const fileStatus = document.getElementById("fileStatus");
 const summary = document.getElementById("summary");
 const resultBody = document.getElementById("resultBody");
+const readyMissingBody = document.getElementById("readyMissingBody");
 const matchStatus = document.getElementById("matchStatus");
 const resultSearch = document.getElementById("resultSearch");
 const resultDateFrom = document.getElementById("resultDateFrom");
@@ -40,10 +48,17 @@ const storeDialog = document.getElementById("storeDialog");
 const storeForm = document.getElementById("storeForm");
 const btnCancelStore = document.getElementById("btnCancelStore");
 const btnDeleteStore = document.getElementById("btnDeleteStore");
+const appRoot = document.getElementById("appRoot");
+const loginGate = document.getElementById("loginGate");
+const pinInput = document.getElementById("pinInput");
+const btnLoginPin = document.getElementById("btnLoginPin");
+const loginStatus = document.getElementById("loginStatus");
 
 let editingStoreId = null;
+let readyStockMissingRowsAll = [];
+let readyStockMissingRows = [];
 
-bootstrap();
+initAccessGate();
 
 function bootstrap() {
   if (!stores.length) {
@@ -54,6 +69,52 @@ function bootstrap() {
   renderStoreList();
   renderChart([]);
   if (btnClearChartFilter) btnClearChartFilter.disabled = true;
+}
+
+function initAccessGate() {
+  const unlocked = sessionStorage.getItem(ACCESS_SESSION_KEY) === "1";
+  if (unlocked) {
+    unlockApp();
+    return;
+  }
+  lockApp();
+  if (pinInput) pinInput.focus();
+  if (pinInput) {
+    pinInput.addEventListener("input", () => {
+      pinInput.value = String(pinInput.value || "").replace(/\D/g, "").slice(0, 6);
+    });
+    pinInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") verifyPin();
+    });
+  }
+  if (btnLoginPin) btnLoginPin.addEventListener("click", verifyPin);
+}
+
+function lockApp() {
+  if (appRoot) appRoot.classList.add("app-hidden");
+  if (loginGate) loginGate.style.display = "grid";
+}
+
+function unlockApp() {
+  if (loginGate) loginGate.style.display = "none";
+  if (appRoot) appRoot.classList.remove("app-hidden");
+  bootstrap();
+}
+
+function verifyPin() {
+  const pin = String(pinInput?.value || "");
+  if (!/^\d{6}$/.test(pin)) {
+    if (loginStatus) loginStatus.textContent = "PIN harus 6 digit angka.";
+    return;
+  }
+  if (pin !== ACCESS_PIN) {
+    if (loginStatus) loginStatus.textContent = "PIN salah.";
+    if (pinInput) pinInput.select();
+    return;
+  }
+  sessionStorage.setItem(ACCESS_SESSION_KEY, "1");
+  if (loginStatus) loginStatus.textContent = "";
+  unlockApp();
 }
 
 function bindEvents() {
@@ -115,7 +176,8 @@ async function loadExcel(e) {
   if (!file) return;
 
   const wb = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true, raw: false });
-  rowsAll = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+  excelSheetRef = wb.Sheets[wb.SheetNames[0]];
+  rowsAll = XLSX.utils.sheet_to_json(excelSheetRef, { defval: "" });
   fileStatus.textContent = `Excel termuat: ${file.name} (${rowsAll.length} baris)`;
   applyFilter();
 }
@@ -139,7 +201,10 @@ function applyFilter(preserveChartDate = false) {
   const grouped = groupByShipDate(rowsFiltered);
   matchedRows = [];
   matchedRowsAll = [];
+  readyStockMissingRowsAll = [];
+  readyStockMissingRows = [];
   renderResults();
+  renderReadyStockMissing();
   renderSummary(grouped);
   renderChart(grouped);
 }
@@ -242,10 +307,37 @@ async function syncCurrentStore() {
       })
       .filter(Boolean);
 
+    const notMatchedRows = rowsFiltered
+      .map((x) => {
+        const order = normalizeOrderNo(x[EXCEL_ORDER_COL]);
+        if (!order) return null;
+        const found = mapByOrder.get(order);
+        if (found) return null;
+        return {
+          noPesanan: order,
+          shipDate: toDateKey(excelDateToJS(x[DATE_COL])),
+          product: getImportCellValue(x, IMPORT_PRODUCT_COL)
+        };
+      })
+      .filter(Boolean);
+
+    // Dedup no pesanan agar tabel ready stok tidak menampilkan baris ganda.
+    const uniqueNotMatchedRows = [];
+    const seenNotMatchedOrders = new Set();
+    notMatchedRows.forEach((r) => {
+      const key = normalizeOrderNo(r.noPesanan);
+      if (!key || seenNotMatchedOrders.has(key)) return;
+      seenNotMatchedOrders.add(key);
+      uniqueNotMatchedRows.push(r);
+    });
+
+    const readyStockOrderSet = await fetchReadyStockOrderSet();
+    readyStockMissingRowsAll = uniqueNotMatchedRows.filter((r) => !readyStockOrderSet.has(normalizeOrderNo(r.noPesanan)));
+
     applyResultFilters();
     renderSummary(groupByShipDate(rowsFiltered));
     const dateNote = activeChartDate ? ` pada tanggal ${activeChartDate}` : "";
-    matchStatus.textContent = `Sinkron selesai. Match ${matchedRows.length} dari ${rowsFiltered.length} order${dateNote}.`;
+    matchStatus.textContent = `Sinkron selesai. Custom match ${matchedRows.length} dari ${rowsFiltered.length} order${dateNote}. Ready stok tidak ditemukan: ${readyStockMissingRows.length}.`;
   } catch (err) {
     const msg = err instanceof TypeError
       ? "Gagal koneksi ke Google Sheets (CORS/CSP/extension/network). Jalankan via http://localhost."
@@ -373,6 +465,20 @@ function renderResults() {
   });
 }
 
+function renderReadyStockMissing() {
+  if (!readyMissingBody) return;
+  readyMissingBody.innerHTML = "";
+  readyStockMissingRows.forEach((r) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(r.noPesanan)}</td>
+      <td>${escapeHtml(r.product || "")}</td>
+      <td>BELUM DIPROSES</td>
+    `;
+    readyMissingBody.appendChild(tr);
+  });
+}
+
 function applyResultFilters() {
   const keyword = String(resultSearch?.value || "").trim().toLowerCase();
   const dateFrom = resultDateFrom?.value || "";
@@ -394,7 +500,21 @@ function applyResultFilters() {
     ].join(" ").toLowerCase();
     return haystack.includes(keyword);
   });
+  readyStockMissingRows = readyStockMissingRowsAll.filter((row) => {
+    const matchDate = !activeChartDate || row.shipDate === activeChartDate;
+    if (!matchDate) return false;
+    if (dateFrom && row.shipDate < dateFrom) return false;
+    if (dateTo && row.shipDate > dateTo) return false;
+    if (!keyword) return true;
+    const haystack = [
+      row.noPesanan,
+      row.shipDate,
+      "ready stok tidak ditemukan"
+    ].join(" ").toLowerCase();
+    return haystack.includes(keyword);
+  });
   renderResults();
+  renderReadyStockMissing();
 }
 
 function clearChartDateFilter() {
@@ -428,7 +548,9 @@ async function pushLateOrders() {
 
     const store = stores.find((s) => s.id === selectedStoreId);
     if (!store) throw new Error("Pilih toko terlebih dulu");
-    if (!matchedRowsAll.length) throw new Error("Belum ada hasil pencocokan. Klik Sinkron Toko dulu.");
+    if (!matchedRowsAll.length && !readyStockMissingRowsAll.length) {
+      throw new Error("Belum ada hasil sinkron. Klik Sinkron Toko dulu.");
+    }
 
     const allowedDates = recentLateDateKeys();
     const allowedSet = new Set(allowedDates);
@@ -438,8 +560,24 @@ async function pushLateOrders() {
       return Boolean(noPesanan) && allowedSet.has(shipDate);
     });
 
-    if (!rows.length) {
-      matchStatus.textContent = `Tidak ada data keterlambatan untuk tanggal ${allowedDates.join(" atau ")}.`;
+    // Ready stok: kirim semua baris yang tampil di tabel (tanpa filter tanggal keterlambatan).
+    const readyRows = readyStockMissingRows
+      .filter((r) => {
+        const noPesanan = String(r.noPesanan || "").trim();
+        return Boolean(noPesanan);
+      })
+      .map((r) => ({
+        kodeJob: "",
+        noPesanan: String(r.noPesanan || "").trim(),
+        product: String(r.product || ""),
+        progress: "BELUM DIPROSES",
+        shipDate: String(r.shipDate || "").trim()
+      }));
+
+    const rowsToPush = [...rows, ...readyRows];
+
+    if (!rowsToPush.length) {
+      matchStatus.textContent = `Tidak ada data untuk dikirim.`;
       return;
     }
 
@@ -447,11 +585,11 @@ async function pushLateOrders() {
       btnPushLateOrders.disabled = true;
       btnPushLateOrders.textContent = "Mengirim...";
     }
-    matchStatus.textContent = `Mengirim ${rows.length} data keterlambatan (${allowedDates.join(" & ")})...`;
+    matchStatus.textContent = `Mengirim ${rowsToPush.length} data (custom + ready stok)...`;
 
     const payload = JSON.stringify({
       storeName: store.name,
-      rows
+      rows: rowsToPush
     });
 
     let successMsg = "";
@@ -558,6 +696,16 @@ function normalizeOrderNo(v) {
   return String(v ?? "").trim();
 }
 
+function getImportCellValue(rowObj, colLetter) {
+  if (!excelSheetRef || !rowObj || typeof rowObj !== "object") return "";
+  const rowNumZeroBased = rowObj.__rowNum__;
+  if (!Number.isInteger(rowNumZeroBased)) return "";
+  const addr = `${String(colLetter || "").toUpperCase()}${rowNumZeroBased + 1}`;
+  const cell = excelSheetRef[addr];
+  if (!cell) return "";
+  return String(cell.w ?? cell.v ?? "").trim();
+}
+
 function extractSheetId(url) {
   const m = String(url).match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
   return m ? m[1] : "";
@@ -603,6 +751,36 @@ function numToCol(num) {
 
 function uniqueCols(cols) {
   return [...new Set(cols.map((c) => c.toUpperCase()))];
+}
+
+async function fetchReadyStockOrderSet() {
+  const allOrders = new Set();
+  for (const tab of READY_STOCK_TABS) {
+    const rows = await fetchReadyStockTabRows(tab);
+    rows.forEach((orderNo) => {
+      const key = normalizeOrderNo(orderNo);
+      if (key) allOrders.add(key);
+    });
+  }
+  return allOrders;
+}
+
+async function fetchReadyStockTabRows(tabName) {
+  const cols = READY_STOCK_ORDER_COLS.join(",");
+  const query = `select ${cols}`;
+  const base = `https://docs.google.com/spreadsheets/d/${READY_STOCK_SHEET_ID}/gviz/tq?tq=${encodeURIComponent(query)}&sheet=${encodeURIComponent(tabName)}`;
+  const parsed = await fetchGvizData(base);
+  const rows = parsed.table?.rows || [];
+  const out = [];
+  rows.forEach((row) => {
+    const cells = row.c || [];
+    READY_STOCK_ORDER_COLS.forEach((_col, idx) => {
+      const v = cells[idx]?.v;
+      const key = normalizeOrderNo(v);
+      if (key) out.push(key);
+    });
+  });
+  return out;
 }
 
 function escapeHtml(v) {

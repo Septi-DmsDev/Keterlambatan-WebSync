@@ -12,7 +12,18 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 </head>
 <body class="index-page">
-  <div class="layout">
+  <section id="loginGate" class="login-gate">
+    <div class="login-card">
+      <h1>Masuk Dashboard</h1>
+      <p class="muted">Masukkan PIN 6 digit untuk melanjutkan.</p>
+      <label for="pinInput">PIN Akses</label>
+      <input id="pinInput" type="password" inputmode="numeric" maxlength="6" placeholder="******" autocomplete="off" />
+      <button id="btnLoginPin" class="btn" type="button">Masuk</button>
+      <p id="loginStatus" class="muted login-status"></p>
+    </div>
+  </section>
+
+  <div id="appRoot" class="layout app-hidden">
     <aside class="sidebar">
       <div class="sidebar-head">
         <h2>Toko</h2>
@@ -40,7 +51,6 @@
           </div>
           <div class="actions">
             <button id="btnApplyFilter" class="btn">Filter</button>
-            <button id="btnSyncStore" class="btn secondary">Sinkron Toko</button>
           </div>
         </div>
         <p id="fileStatus" class="muted">Belum ada file Excel.</p>
@@ -55,7 +65,10 @@
       </section>
 
       <section class="panel">
-        <h3>Hasil Pencocokan</h3>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px;">
+          <h3 style="margin:0;">Hasil Pencocokan Produk Custom</h3>
+          <button id="btnSyncStore" class="btn secondary" type="button" style="width:auto; min-width:180px;">Sinkron Toko</button>
+        </div>
         <p id="matchStatus" class="muted">Belum ada data toko yang dimuat.</p>
         <div class="result-tools">
           <div>
@@ -89,6 +102,19 @@
               </tr>
             </thead>
             <tbody id="resultBody"></tbody>
+          </table>
+        </div>
+        <h3 style="margin-top:12px;">Ready Stok Belum Diproses</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>NO. PESANAN</th>
+                <th>PRODUK</th>
+                <th>PJ DIVISI</th>
+              </tr>
+            </thead>
+            <tbody id="readyMissingBody"></tbody>
           </table>
         </div>
         <div class="actions" style="margin-top:12px;">

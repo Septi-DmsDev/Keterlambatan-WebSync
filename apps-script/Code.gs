@@ -1,5 +1,5 @@
 const TARGET_SPREADSHEET_ID = "18EIkDlLVAEzvXFUH9Hi2j7pGWO0yyWyZlhjHfk5RHiQ";
-const TARGET_SHEET_NAME = "Sheet1";
+const TARGET_SHEET_NAME = "05. Mei 2026";
 const TZ = "Asia/Jakarta";
 
 function doPost(e) {
@@ -15,7 +15,11 @@ function doPost(e) {
     const allowedSet = toSet(allowedDates);
     const safeRows = rows
       .filter(isSafeRow)
-      .filter((r) => allowedSet[String(r.shipDate || "").trim()]);
+      .filter((r) => {
+        const isReadyRow = String(r.progress || "").trim().toUpperCase() === "BELUM DIPROSES";
+        if (isReadyRow) return true;
+        return allowedSet[String(r.shipDate || "").trim()];
+      });
 
     if (!safeRows.length) {
       return jsonOut({ ok: true, appended: 0, skipped: rows.length, reason: "Tidak ada data keterlambatan untuk rentang 2 hari terakhir" });
@@ -95,6 +99,8 @@ function toSet(items) {
 function isSafeRow(row) {
   if (!row || typeof row !== "object") return false;
   const noPesanan = String(row.noPesanan || "").trim();
+  const progress = String(row.progress || "").trim().toUpperCase();
+  if (progress === "BELUM DIPROSES") return Boolean(noPesanan);
   const shipDate = String(row.shipDate || "").trim();
   return Boolean(noPesanan && shipDate);
 }

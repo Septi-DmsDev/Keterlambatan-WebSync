@@ -398,4 +398,4 @@ window.STORE_CONFIG = [
 
 // Isi setelah deploy Apps Script Web App:
 // contoh: "https://script.google.com/macros/s/AKfycb.../exec"
-window.LATE_SHEET_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyGXf-ASwox8Lb-8XRQ0HL-khu8Ct0XksgdzABXiCj2rZVIMdSaO652kbn-msV-UEEiqg/exec";
+window.LATE_SHEET_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbx_zQ86s0FJb0eJuUfZcRqEn6QVx1nUUtEsYzxptI58giPnMYl-i7pvSOAa-DLIgIvbUA/exec";

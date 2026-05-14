@@ -432,3 +432,34 @@ textarea { width: 100%; border-radius: 9px; border: 1px solid var(--line); paddi
   box-shadow: 8px 8px 0 var(--idx-ink);
 }
 
+.index-page .app-hidden { display: none; }
+.index-page .login-gate {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.index-page .login-card {
+  width: min(420px, 92vw);
+  background: var(--idx-paper);
+  border: 4px solid var(--idx-ink);
+  border-radius: 18px;
+  box-shadow: 8px 8px 0 var(--idx-ink);
+  padding: 20px;
+  display: grid;
+  gap: 10px;
+}
+.index-page .login-card h1 {
+  margin: 0;
+}
+.index-page .login-card input {
+  text-align: center;
+  letter-spacing: 8px;
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+.index-page .login-status {
+  min-height: 22px;
+  margin: 0;
+}
+
