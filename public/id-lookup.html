@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lookup ID Pesanan</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Changa:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="lookup-page">
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <h2>Tools</h2>
+      </div>
+      <div class="store-list">
+        <a class="store-item" href="./index.html">Dashboard Utama</a>
+        <a class="store-item active" href="./id-lookup.html">Lookup ID Pesanan</a>
+      </div>
+    </aside>
+
+    <main class="content lookup-content">
+      <section class="panel lookup-panel">
+        <h1>Lookup ID Pesanan Multi Tab</h1>
+        <p class="muted">Tempel daftar ID (satu baris satu ID). Engine akan scan semua tab, cocokkan dari kolom F baris 6 ke bawah.</p>
+
+        <div class="toolbar lookup-toolbar">
+          <div>
+            <label>Daftar ID Pesanan</label>
+            <textarea id="orderIds" rows="8" placeholder="581902849595115178&#10;581905461428979348&#10;581904816593077958"></textarea>
+          </div>
+        </div>
+
+        <div class="actions lookup-actions">
+          <button id="btnLookup" class="btn">Cari Sekarang</button>
+        </div>
+
+        <p id="lookupStatus" class="muted">Belum ada proses pencarian.</p>
+        <div id="lookupSummary" class="summary"></div>
+      </section>
+
+      <section class="panel lookup-panel">
+        <div class="result-header">
+          <h3>Hasil</h3>
+          <button id="btnCopyDetected" class="btn secondary copy-btn" type="button">Salin Semua Data Tabel</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>KODE JOB</th>
+                <th>ID PESANAN</th>
+                <th>CUSTOMER</th>
+                <th>PRODUCT</th>
+                <th>QTY</th>
+                <th>PROGRESS</th>
+                <th>TGL</th>
+              </tr>
+            </thead>
+            <tbody id="resultBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel lookup-panel">
+        <h3>Tidak Ditemukan</h3>
+        <pre id="missingBox" class="muted missing-box"></pre>
+      </section>
+    </main>
+  </div>
+
+  <script src="./id-lookup.js"></script>
+</body>
+</html>

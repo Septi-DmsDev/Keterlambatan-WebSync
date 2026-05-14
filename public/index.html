@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Multi Store Order Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Changa:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body class="index-page">
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <h2>Toko</h2>
+      </div>
+      <div id="storeList" class="store-list"></div>
+      <a class="store-item" href="./id-lookup.html" style="margin-top:10px; display:block; text-decoration:none;">Lookup ID Pesanan</a>
+    </aside>
+
+    <main class="content">
+      <section class="panel">
+        <h1>Dashboard Order</h1>
+        <p class="muted">Upload Excel, pilih toko, lalu cocokkan order dengan spreadsheet toko.</p>
+        <div class="toolbar">
+          <div>
+            <label>File Excel</label>
+            <input id="excelFile" type="file" accept=".xlsx,.xls" />
+          </div>
+          <div>
+            <label>Tanggal Dari</label>
+            <input id="dateFrom" type="date" />
+          </div>
+          <div>
+            <label>Tanggal Sampai</label>
+            <input id="dateTo" type="date" />
+          </div>
+          <div class="actions">
+            <button id="btnApplyFilter" class="btn">Filter</button>
+            <button id="btnSyncStore" class="btn secondary">Sinkron Toko</button>
+          </div>
+        </div>
+        <p id="fileStatus" class="muted">Belum ada file Excel.</p>
+        <div id="summary" class="summary"></div>
+      </section>
+
+      <section class="panel">
+        <h3>Jumlah Order Berdasarkan Batas Kirim</h3>
+        <div class="chart-wrap">
+          <canvas id="ordersChart"></canvas>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>Hasil Pencocokan</h3>
+        <p id="matchStatus" class="muted">Belum ada data toko yang dimuat.</p>
+        <div class="result-tools">
+          <div>
+            <label>Cari di hasil sinkron</label>
+            <input id="resultSearch" type="text" placeholder="Cari kode job / no pesanan / customer / product / progress" />
+          </div>
+          <div>
+            <label>Tanggal Sinkron Dari</label>
+            <input id="resultDateFrom" type="date" />
+          </div>
+          <div>
+            <label>Tanggal Sinkron Sampai</label>
+            <input id="resultDateTo" type="date" />
+          </div>
+          <div>
+            <label>Filter Tanggal Chart</label>
+            <button id="btnClearChartFilter" class="btn secondary" type="button">Reset Filter Tanggal</button>
+          </div>
+          <div>
+            <label>Keterlambatan</label>
+            <button id="btnPushLateOrders" class="btn" type="button">Kirim Keterlambatan</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>KODE JOB</th>
+                <th>NO. PESANAN</th>
+                <th>CUSTOMER</th>
+                <th>PRODUCT</th>
+                <th>QTY</th>
+                <th>TGL KIRIM</th>
+                <th>PROGRESS</th>
+              </tr>
+            </thead>
+            <tbody id="resultBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="storeDialog">
+    <form id="storeForm" method="dialog" class="dialog-form">
+      <h3>Setting Toko</h3>
+      <label>Nama Toko</label>
+      <input id="storeName" required />
+
+      <label>Link Spreadsheet</label>
+      <input id="storeUrl" required placeholder="https://docs.google.com/spreadsheets/d/..." />
+
+      <label>Nama Sheet (fallback)</label>
+      <input id="storeSheet" value="Sheet1" />
+
+      <label>Kolom KODE JOB</label>
+      <input id="colJob" value="A" />
+
+      <label>Kolom NO. PESANAN</label>
+      <input id="colOrder" value="F" />
+
+      <label>Kolom CUSTOMER</label>
+      <input id="colCustomer" value="B" />
+
+      <label>Kolom PRODUCT</label>
+      <input id="colProduct" value="C" />
+
+      <label>Kolom QTY</label>
+      <input id="colQty" value="D" />
+
+      <label>Rentang Progress (contoh K:Z)</label>
+      <input id="progressRange" value="K:Z" />
+
+      <label>Baris Data Mulai</label>
+      <input id="startRow" type="number" min="1" value="6" />
+
+      <div class="dialog-actions">
+        <button type="button" id="btnDeleteStore" class="btn danger">Hapus</button>
+        <button type="button" id="btnCancelStore" class="btn secondary">Batal</button>
+        <button type="submit" class="btn">Simpan</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="./stores.config.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
+
+
