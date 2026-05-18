@@ -396,7 +396,7 @@ window.STORE_CONFIG = [
   {
     id: "SS",
     name: "SS",
-    url: "https://docs.google.com/spreadsheets/d/1b_8SxLQK7psTWZB0C1NBYtxXNqP1bj8REUPOeCcP9bU/",
+    url: "https://docs.google.com/spreadsheets/d/1b_8SxLQK7psTWZB0C1NBYtxXNqP1bj8REUPOeCcP9bU/edit?gid=920170757#gid=920170757",
     sheet: "SS",
     colJob: "A",
     colOrder: "F",
@@ -409,7 +409,7 @@ window.STORE_CONFIG = [
   {
     id: "SV",
     name: "SV",
-    url: "https://docs.google.com/spreadsheets/d/1b_8SxLQK7psTWZB0C1NBYtxXNqP1bj8REUPOeCcP9bU/",
+    url: "https://docs.google.com/spreadsheets/d/1b_8SxLQK7psTWZB0C1NBYtxXNqP1bj8REUPOeCcP9bU/edit?gid=216309468#gid=216309468",
     sheet: "SV",
     colJob: "A",
     colOrder: "F",

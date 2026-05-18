@@ -1,18 +1,35 @@
 const DATE_COL = "Pesanan Harus Dikirimkan Sebelum (Menghindari keterlambatan)";
+const PAYMENT_DATE_COL = "Waktu Pembayaran Dilakukan";
 const EXCEL_ORDER_COL = "No. Pesanan";
 const ACCESS_PIN = "140526";
 const ACCESS_SESSION_KEY = "urgenator_pin_ok";
 const READY_STOCK_SHEET_ID = "1BkMkaIiH-oQxMiLR-mtzQkN504bY84eKwbgQDJ6RmLE";
 const READY_STOCK_TABS = ["PP TEKNOS", "PP DREAM/MAHAR", "PP RICH", "PP VARIATIF", "PP ASHA", "PP MALL", "PP CLASSY"];
 const READY_STOCK_ORDER_COLS = ["C", "H", "M", "R", "W", "AB"];
+const GO_SHEET_ID = "1zo-EaLcYR4W7OnXwvpWIa0Eg7UXSiENWvJrKJCZDIno";
+const GO_SHEET_NAME = "AKURASI PROGRES ORDER JOB BERMASALAH, EXPRESS";
+const GO_COL_JOB = "A";
+const GO_COL_CUSTOMER = "B";
+const GO_COL_PRODUCT = "C";
+const GO_COL_QTY = "E";
+const GO_COL_ORDER = "F";
+const GO_PROGRESS_RANGE = "N:AC";
+const GO_START_ROW = 6;
+const IMPORT_PRODUCT_NAME_COL = "M";
 const IMPORT_PRODUCT_COL = "O";
+
+// Jam Setor columns per section (8 sections, 5 cols each)
+const JAMSETOR_ORDER_COLS = ["C", "H", "M", "R", "W", "AB", "AG", "AL"];
+const JAMSETOR_DATE_COLS  = ["B", "G", "L", "Q", "V", "AA", "AF", "AK"];
+const JAMSETOR_TIME_COLS  = ["D", "I", "N", "S", "X", "AC", "AH", "AM"];
+
 const STAGES = [
   "ACC PERTAMA",
   "DESAIN FIX",
   "PRINTING",
-  "GANDENGAN / CUTTING MESIN",
+  "GAMBARINGAN / CUTTING MESIN",
   "POTONG",
-  "FINISHING / CHEKER UNDANGAN",
+  "FINISHING / CHICKER BRANDING",
   "CHEKER PAKET",
   "PACKING"
 ];
@@ -23,6 +40,8 @@ let rowsAll = [];
 let rowsFiltered = [];
 let matchedRows = [];
 let matchedRowsAll = [];
+let goMatchedRows = [];
+let goMatchedRowsAll = [];
 let excelSheetRef = null;
 let orderChart;
 let activeChartDate = "";
@@ -37,6 +56,8 @@ const dateTo = document.getElementById("dateTo");
 const fileStatus = document.getElementById("fileStatus");
 const summary = document.getElementById("summary");
 const resultBody = document.getElementById("resultBody");
+const goResultBody = document.getElementById("goResultBody");
+const customNotMatchedBody = document.getElementById("customNotMatchedBody");
 const readyMissingBody = document.getElementById("readyMissingBody");
 const matchStatus = document.getElementById("matchStatus");
 const resultSearch = document.getElementById("resultSearch");
@@ -55,6 +76,8 @@ const btnLoginPin = document.getElementById("btnLoginPin");
 const loginStatus = document.getElementById("loginStatus");
 
 let editingStoreId = null;
+let customNotMatchedRowsAll = [];
+let customNotMatchedRows = [];
 let readyStockMissingRowsAll = [];
 let readyStockMissingRows = [];
 
@@ -201,9 +224,15 @@ function applyFilter(preserveChartDate = false) {
   const grouped = groupByShipDate(rowsFiltered);
   matchedRows = [];
   matchedRowsAll = [];
+  goMatchedRows = [];
+  goMatchedRowsAll = [];
+  customNotMatchedRowsAll = [];
+  customNotMatchedRows = [];
   readyStockMissingRowsAll = [];
   readyStockMissingRows = [];
   renderResults();
+  renderGoResults();
+  renderCustomNotMatched();
   renderReadyStockMissing();
   renderSummary(grouped);
   renderChart(grouped);
@@ -284,16 +313,12 @@ async function syncCurrentStore() {
     matchStatus.textContent = `Sinkron data toko ${store.name}...`;
 
     const sheetData = await fetchStoreRows(store);
-    const mapByOrder = new Map();
-    sheetData.forEach((r) => {
-      const key = normalizeOrderNo(r.orderNo);
-      if (key) mapByOrder.set(key, r);
-    });
+    const storeOrderIndex = createOrderIndex(sheetData, (r) => r.orderNo);
 
     matchedRowsAll = rowsFiltered
       .map((x) => {
         const order = normalizeOrderNo(x[EXCEL_ORDER_COL]);
-        const found = mapByOrder.get(order);
+        const found = findOrderMatchFromImport(order, storeOrderIndex);
         if (!found) return null;
         return {
           kodeJob: found.kodeJob,
@@ -307,16 +332,72 @@ async function syncCurrentStore() {
       })
       .filter(Boolean);
 
+    // Dedup kodeJob + product combination (same job+product = 1 baris)
+    const seenJobProduct = new Set();
+    matchedRowsAll = matchedRowsAll.filter((r) => {
+      const key = `${r.kodeJob}|||${r.product}`;
+      if (seenJobProduct.has(key)) return false;
+      seenJobProduct.add(key);
+      return true;
+    });
+
+    // Fetch GO data
+    const goData = await fetchGoRows();
+    const goOrderIndex = createOrderIndex(goData, (r) => r.orderNo);
+
+    goMatchedRowsAll = rowsFiltered
+      .map((x) => {
+        const order = normalizeOrderNo(x[EXCEL_ORDER_COL]);
+        const found = findOrderMatchFromImport(order, goOrderIndex);
+        if (!found) return null;
+        return {
+          kodeJob: found.kodeJob,
+          noPesanan: found.orderNo,
+          customer: found.customer,
+          product: found.product,
+          qty: found.qty,
+          progress: found.progress,
+          shipDate: toDateKey(excelDateToJS(x[DATE_COL]))
+        };
+      })
+      .filter(Boolean);
+
+    // Dedup kodeJob + product combination (same job+product = 1 baris)
+    const seenGoJobProduct = new Set();
+    goMatchedRowsAll = goMatchedRowsAll.filter((r) => {
+      const key = `${r.kodeJob}|||${r.product}`;
+      if (seenGoJobProduct.has(key)) return false;
+      seenGoJobProduct.add(key);
+      return true;
+    });
+
+    const jamSetorMap = await fetchJamSetorMap();
+
     const notMatchedRows = rowsFiltered
       .map((x) => {
         const order = normalizeOrderNo(x[EXCEL_ORDER_COL]);
         if (!order) return null;
-        const found = mapByOrder.get(order);
+        const found = findOrderMatchFromImport(order, storeOrderIndex);
         if (found) return null;
+        const foundGo = findOrderMatchFromImport(order, goOrderIndex);
+        if (foundGo) return null;
+        const excelJam = String(x["Jam Setor"] ?? "").trim();
+        const jamSetorEntry = findMappedValueByOrder(order, jamSetorMap);
+        const jamSetor = excelJam || (jamSetorEntry && jamSetorEntry.time) || "";
+        const tglSetor = (jamSetorEntry && jamSetorEntry.date) || "";
+        const paymentDate = excelDateToJS(x[PAYMENT_DATE_COL]);
+        const shipDeadline = excelDateToJS(x[DATE_COL]);
+        const daysDiff = (paymentDate && shipDeadline)
+          ? Math.round((shipDeadline - paymentDate) / (1000 * 60 * 60 * 24))
+          : null;
         return {
           noPesanan: order,
           shipDate: toDateKey(excelDateToJS(x[DATE_COL])),
-          product: getImportCellValue(x, IMPORT_PRODUCT_COL)
+          product: getImportCellValue(x, IMPORT_PRODUCT_NAME_COL),
+          variasi: getImportCellValue(x, IMPORT_PRODUCT_COL),
+          jamSetor,
+          tglSetor,
+          isCustom: daysDiff === null || daysDiff > 3
         };
       })
       .filter(Boolean);
@@ -331,13 +412,14 @@ async function syncCurrentStore() {
       uniqueNotMatchedRows.push(r);
     });
 
-    const readyStockOrderSet = await fetchReadyStockOrderSet();
-    readyStockMissingRowsAll = uniqueNotMatchedRows.filter((r) => !readyStockOrderSet.has(normalizeOrderNo(r.noPesanan)));
+    const buildProgress = (r) => ({ ...r, pjDivisi: determinePjDivisi(r.jamSetor) || "BLOM DIPROSES" });
+    customNotMatchedRowsAll = uniqueNotMatchedRows.filter((r) => r.isCustom).map(buildProgress);
+    readyStockMissingRowsAll = uniqueNotMatchedRows.filter((r) => !r.isCustom).map(buildProgress);
 
     applyResultFilters();
     renderSummary(groupByShipDate(rowsFiltered));
     const dateNote = activeChartDate ? ` pada tanggal ${activeChartDate}` : "";
-    matchStatus.textContent = `Sinkron selesai. Custom match ${matchedRows.length} dari ${rowsFiltered.length} order${dateNote}. Ready stok tidak ditemukan: ${readyStockMissingRows.length}.`;
+    matchStatus.textContent = `Sinkron selesai. Custom match ${matchedRows.length} dari ${rowsFiltered.length} order, GO match ${goMatchedRows.length}${dateNote}. Custom belum diproses: ${customNotMatchedRows.length}, Ready: ${readyStockMissingRows.length}.`;
   } catch (err) {
     const msg = err instanceof TypeError
       ? "Gagal koneksi ke Google Sheets (CORS/CSP/extension/network). Jalankan via http://localhost."
@@ -373,6 +455,34 @@ async function fetchStoreRows(store) {
       customer: cells[idx[store.colCustomer.toUpperCase()]]?.v ?? "",
       product: cells[idx[store.colProduct.toUpperCase()]]?.v ?? "",
       qty: cells[idx[store.colQty.toUpperCase()]]?.v ?? "",
+      progress: detectProgress(rawProgress)
+    };
+  });
+}
+
+async function fetchGoRows() {
+  const progressCols = expandRangeCols(GO_PROGRESS_RANGE);
+  const selectCols = uniqueCols([GO_COL_JOB, GO_COL_ORDER, GO_COL_CUSTOMER, GO_COL_PRODUCT, GO_COL_QTY, ...progressCols]);
+  const offset = Math.max(0, GO_START_ROW - 1);
+  const query = `select ${selectCols.join(",")} offset ${offset}`;
+
+  const base = `https://docs.google.com/spreadsheets/d/${GO_SHEET_ID}/gviz/tq?tq=${encodeURIComponent(query)}`;
+  const url = `${base}&sheet=${encodeURIComponent(GO_SHEET_NAME)}`;
+  const parsed = await fetchGvizData(url);
+  const rows = parsed.table?.rows || [];
+
+  const idx = Object.fromEntries(selectCols.map((c, i) => [c.toUpperCase(), i]));
+  const progressIdx = progressCols.map((c) => idx[c.toUpperCase()]);
+
+  return rows.map((row) => {
+    const cells = row.c || [];
+    const rawProgress = progressIdx.map((i) => cells[i]?.v ?? "");
+    return {
+      kodeJob: cells[idx[GO_COL_JOB.toUpperCase()]]?.v ?? "",
+      orderNo: cells[idx[GO_COL_ORDER.toUpperCase()]]?.v ?? "",
+      customer: cells[idx[GO_COL_CUSTOMER.toUpperCase()]]?.v ?? "",
+      product: cells[idx[GO_COL_PRODUCT.toUpperCase()]]?.v ?? "",
+      qty: cells[idx[GO_COL_QTY.toUpperCase()]]?.v ?? "",
       progress: detectProgress(rawProgress)
     };
   });
@@ -465,6 +575,39 @@ function renderResults() {
   });
 }
 
+function renderGoResults() {
+  if (!goResultBody) return;
+  goResultBody.innerHTML = "";
+  goMatchedRows.forEach((r) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(r.kodeJob)}</td>
+      <td>${escapeHtml(r.noPesanan)}</td>
+      <td>${escapeHtml(r.customer)}</td>
+      <td>${escapeHtml(r.product)}</td>
+      <td>${escapeHtml(r.qty)}</td>
+      <td>${escapeHtml(r.shipDate)}</td>
+      <td><span class="progress-tag">${escapeHtml(r.progress)}</span></td>
+    `;
+    goResultBody.appendChild(tr);
+  });
+}
+
+function renderCustomNotMatched() {
+  if (!customNotMatchedBody) return;
+  customNotMatchedBody.innerHTML = "";
+  customNotMatchedRows.forEach((r) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(r.noPesanan)}</td>
+      <td>${escapeHtml(r.product || "")}</td>
+      <td>${escapeHtml(r.variasi || "")}</td>
+      <td>${escapeHtml(r.shipDate || "")}</td>
+    `;
+    customNotMatchedBody.appendChild(tr);
+  });
+}
+
 function renderReadyStockMissing() {
   if (!readyMissingBody) return;
   readyMissingBody.innerHTML = "";
@@ -473,7 +616,9 @@ function renderReadyStockMissing() {
     tr.innerHTML = `
       <td>${escapeHtml(r.noPesanan)}</td>
       <td>${escapeHtml(r.product || "")}</td>
-      <td>BELUM DIPROSES</td>
+      <td>${escapeHtml(r.variasi || "")}</td>
+      <td>${escapeHtml(r.pjDivisi || "BLOM DIPROSES")}</td>
+      <td>${escapeHtml(formatTglJamSetor(r.tglSetor, r.jamSetor))}</td>
     `;
     readyMissingBody.appendChild(tr);
   });
@@ -500,20 +645,37 @@ function applyResultFilters() {
     ].join(" ").toLowerCase();
     return haystack.includes(keyword);
   });
-  readyStockMissingRows = readyStockMissingRowsAll.filter((row) => {
+  goMatchedRows = goMatchedRowsAll.filter((row) => {
     const matchDate = !activeChartDate || row.shipDate === activeChartDate;
     if (!matchDate) return false;
     if (dateFrom && row.shipDate < dateFrom) return false;
     if (dateTo && row.shipDate > dateTo) return false;
     if (!keyword) return true;
     const haystack = [
+      row.kodeJob,
       row.noPesanan,
+      row.customer,
+      row.product,
+      row.qty,
       row.shipDate,
-      "ready stok tidak ditemukan"
+      row.progress
     ].join(" ").toLowerCase();
     return haystack.includes(keyword);
   });
+  const filterNotMatched = (row) => {
+    const matchDate = !activeChartDate || row.shipDate === activeChartDate;
+    if (!matchDate) return false;
+    if (dateFrom && row.shipDate < dateFrom) return false;
+    if (dateTo && row.shipDate > dateTo) return false;
+    if (!keyword) return true;
+    return [row.noPesanan, row.shipDate, row.product, row.tglSetor, row.jamSetor]
+      .join(" ").toLowerCase().includes(keyword);
+  };
+  customNotMatchedRows = customNotMatchedRowsAll.filter(filterNotMatched);
+  readyStockMissingRows = readyStockMissingRowsAll.filter(filterNotMatched);
   renderResults();
+  renderGoResults();
+  renderCustomNotMatched();
   renderReadyStockMissing();
 }
 
@@ -570,7 +732,7 @@ async function pushLateOrders() {
         kodeJob: "",
         noPesanan: String(r.noPesanan || "").trim(),
         product: String(r.product || ""),
-        progress: "BELUM DIPROSES",
+        progress: r.pjDivisi || "BLOM DIPROSES",
         shipDate: String(r.shipDate || "").trim()
       }));
 
@@ -693,7 +855,53 @@ function toDateKey(d) {
 }
 
 function normalizeOrderNo(v) {
-  return String(v ?? "").trim();
+  return String(v ?? "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
+
+function getOrderSuffix4(order) {
+  const normalized = normalizeOrderNo(order);
+  if (!normalized) return "";
+  if (normalized.length <= 4) return normalized;
+  return normalized.slice(-4);
+}
+
+function createOrderIndex(rows, getOrderNo) {
+  const full = new Map();
+  rows.forEach((row) => {
+    const order = normalizeOrderNo(getOrderNo(row));
+    if (!order) return;
+    if (!full.has(order)) full.set(order, row);
+  });
+  return { full };
+}
+
+function findOrderMatchFromImport(importOrder, index) {
+  if (!index) return null;
+  const fullImport = normalizeOrderNo(importOrder);
+  if (!fullImport) return null;
+  const exact = index.full.get(fullImport);
+  if (exact) return exact;
+  const suffix = getOrderSuffix4(fullImport);
+  if (!suffix) return null;
+  return index.full.get(suffix) || null;
+}
+
+function hasOrderInSet(order, setObj) {
+  const normalized = normalizeOrderNo(order);
+  if (!normalized) return false;
+  if (setObj.has(normalized)) return true;
+  return setObj.has(getOrderSuffix4(normalized));
+}
+
+function findMappedValueByOrder(order, mapObj) {
+  const normalized = normalizeOrderNo(order);
+  if (!normalized) return "";
+  if (mapObj.has(normalized)) return mapObj.get(normalized);
+  const suffix = getOrderSuffix4(normalized);
+  if (suffix && mapObj.has(suffix)) return mapObj.get(suffix);
+  return "";
 }
 
 function getImportCellValue(rowObj, colLetter) {
@@ -759,7 +967,9 @@ async function fetchReadyStockOrderSet() {
     const rows = await fetchReadyStockTabRows(tab);
     rows.forEach((orderNo) => {
       const key = normalizeOrderNo(orderNo);
-      if (key) allOrders.add(key);
+      if (!key) return;
+      allOrders.add(key);
+      allOrders.add(getOrderSuffix4(key));
     });
   }
   return allOrders;
@@ -781,6 +991,76 @@ async function fetchReadyStockTabRows(tabName) {
     });
   });
   return out;
+}
+
+async function fetchJamSetorMap() {
+  const map = new Map();
+  // Setiap seksi: date_col, order_col, time_col → 3 kolom per seksi
+  const allCols = [];
+  JAMSETOR_ORDER_COLS.forEach((o, i) => {
+    allCols.push(JAMSETOR_DATE_COLS[i]);
+    allCols.push(o);
+    allCols.push(JAMSETOR_TIME_COLS[i]);
+  });
+  for (const tab of READY_STOCK_TABS) {
+    const query = `select ${allCols.join(",")}`;
+    const base = `https://docs.google.com/spreadsheets/d/${READY_STOCK_SHEET_ID}/gviz/tq?tq=${encodeURIComponent(query)}&sheet=${encodeURIComponent(tab)}`;
+    const parsed = await fetchGvizData(base);
+    const rows = parsed.table?.rows || [];
+    rows.forEach((row) => {
+      const cells = row.c || [];
+      JAMSETOR_ORDER_COLS.forEach((_col, idx) => {
+        const dateCell  = cells[idx * 3];
+        const orderNo   = cells[idx * 3 + 1]?.v;
+        const timeCell  = cells[idx * 3 + 2];
+        if (!orderNo) return;
+        const key = normalizeOrderNo(orderNo);
+        if (!key) return;
+        const entry = {
+          date: formatGvizDate(dateCell),
+          time: timeCell?.f ?? String(timeCell?.v ?? "").trim()
+        };
+        if (!map.has(key)) map.set(key, entry);
+        const sfx = getOrderSuffix4(key);
+        if (sfx && !map.has(sfx)) map.set(sfx, entry);
+      });
+    });
+  }
+  return map;
+}
+
+function parseJamSetorTime(jamSetor) {
+  if (!jamSetor) return null;
+  const m = String(jamSetor).trim().match(/(\d{1,2})\s*[.:\s]\s*(\d{2})/);
+  if (!m) return null;
+  return `${m[1].padStart(2, "0")}:${m[2]}`;
+}
+
+function formatGvizDate(cell) {
+  if (!cell) return "";
+  if (cell.f) return String(cell.f).trim();
+  const v = cell.v;
+  if (!v) return "";
+  if (typeof v === "string") {
+    const m = v.match(/Date\((\d+),(\d+),(\d+)\)/);
+    if (m) {
+      const dd = String(Number(m[3])).padStart(2, "0");
+      const mm = String(Number(m[2]) + 1).padStart(2, "0");
+      return `${dd}/${mm}`;
+    }
+  }
+  return String(v).trim();
+}
+
+function formatTglJamSetor(tgl, jam) {
+  const parts = [tgl, jam].filter(Boolean);
+  return parts.join(" - ") || "-";
+}
+
+function determinePjDivisi(jamSetor) {
+  const time = parseJamSetorTime(jamSetor);
+  if (!time) return null;
+  return time > "12:30" ? "SMB" : "Finishing";
 }
 
 function escapeHtml(v) {

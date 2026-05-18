@@ -46,12 +46,13 @@ async function runLookup() {
 
   try {
     const allRows = await fetchAllTabs();
-    const idSet = new Set(ids.map(normalizeOrderNo));
-    const foundRows = allRows.filter((row) => idSet.has(normalizeOrderNo(row.colOrder)));
+    const rowMap = createRowOrderMap(allRows);
+    const foundRows = ids
+      .map((id) => findRowMatchFromImport(id, rowMap))
+      .filter(Boolean);
     lastFoundRows = foundRows;
 
-    const foundSet = new Set(foundRows.map((r) => normalizeOrderNo(r.colOrder)));
-    const missing = ids.filter((id) => !foundSet.has(normalizeOrderNo(id)));
+    const missing = ids.filter((id) => !findRowMatchFromImport(id, rowMap));
 
     renderResults(foundRows);
     renderMissing(missing);
@@ -247,6 +248,38 @@ function parseIds(raw) {
 
 function normalizeOrderNo(v) {
   return String(v ?? "").trim();
+}
+
+function normalizeOrderKey(v) {
+  return String(v ?? "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
+
+function getOrderSuffix4(orderKey) {
+  if (!orderKey) return "";
+  if (orderKey.length <= 4) return orderKey;
+  return orderKey.slice(-4);
+}
+
+function createRowOrderMap(rows) {
+  const map = new Map();
+  rows.forEach((row) => {
+    const key = normalizeOrderKey(row.colOrder);
+    if (!key || map.has(key)) return;
+    map.set(key, row);
+  });
+  return map;
+}
+
+function findRowMatchFromImport(importOrderNo, rowMap) {
+  const fullKey = normalizeOrderKey(importOrderNo);
+  if (!fullKey) return null;
+  const exact = rowMap.get(fullKey);
+  if (exact) return exact;
+  const suffix = getOrderSuffix4(fullKey);
+  if (!suffix) return null;
+  return rowMap.get(suffix) || null;
 }
 
 function getLatestProgressInfo(cells) {
